@@ -5,8 +5,8 @@
 #include <cmath>
 
 
-const int WINDOW_WIDTH = 800;
-const int WINDOW_HEIGHT = 600;
+constexpr int WINDOW_WIDTH = 800;
+constexpr int WINDOW_HEIGHT = 600;
 
 bool init(SDL_Window*& window, SDL_Renderer*& renderer) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
@@ -73,38 +73,105 @@ vect_t operator*(const vect_t a, const double b) {
     return ret;
 }
 
+vect_t operator-(const vect_t a, const vect_t b) {
+    vect_t ret = a;
+    ret.v.x -= b.v.x;
+    ret.v.y -= b.v.y;
+    return ret;
+}
+
 class Car {
-public:
+
+private:
     SDL_Rect rect;
-    vect_t position = {0,0} ;
-    vect_t velocity = {0,0} ;
-    vect_t acceleration = {0,0} ;
+    vect_t position = { 0, 0 };
+    vect_t velocity = { 0, 0 };
+    vect_t acceleration = { 0, 0 };
+    double angle = 0.;
+    double accelerationValue = 0.0;
 
     SDL_Texture* texture;
+public:
 
-    Car(int x, int y, SDL_Texture* tex) :  texture(tex) {
+    Car(int x, int y, SDL_Texture* tex) : texture(tex) {
         position.v.x = x;
         position.v.y = y;
-        rect = {x,y,50,100};
+        rect = { x, y, 25, 50 };
     }
 
 
-    void moveUp(double value) { acceleration.v.y = value; }
-    void moveDown(double value) { acceleration.v.y = value; }
-    void moveLeft(double value) { acceleration.v.x = value;  }
-    void moveRight(double value) { acceleration.v.x = value; }
-
-    void draw(SDL_Renderer* renderer) {
-        SDL_RenderCopy(renderer, texture, nullptr, &rect);
+    void accelerate(double value) {
+        accelerationValue = value;
     }
+
+    void decelerate(double value) {
+        accelerationValue = -value*0.8;
+    }
+
+    //Turning the vehicle
+    void turnLeft(double value) { angle -= value; }
+    void turnRight(double value) { angle += value; }
+
+    void draw(SDL_Renderer* renderer) const {
+        SDL_RenderCopyEx(renderer, texture, nullptr, &rect, angle, nullptr, SDL_FLIP_NONE);
+    }
+
     void update(double dt) {
+        acceleration.v.y = -accelerationValue * std::cos(angle * M_PI / 180.0);
+        acceleration.v.x = accelerationValue * std::sin(angle * M_PI / 180.0);
+
+
+        //Physics using acceleration and velocity to determin position
         this->position = this->position + (this->velocity * dt) + (this->acceleration * dt * dt * 0.5);
         this->velocity = this->velocity + (this->acceleration * dt);
         this->velocity = this->velocity * 0.99;
+
+        //Collision with bound so player can't go out of bounds
+        if (position.v.x < 0) {
+            position.v.x = 0;
+            velocity.v.x = -velocity.v.x;
+        }
+        if (position.v.x + rect.w > WINDOW_WIDTH) {
+            position.v.x = WINDOW_WIDTH - rect.w;
+            velocity.v.x = -velocity.v.x;
+        }
+        if (position.v.y < 0) {
+            position.v.y = 0;
+            velocity.v.y = -velocity.v.y;
+        }
+        if (position.v.y + rect.h > WINDOW_HEIGHT) {
+            position.v.y = WINDOW_HEIGHT - rect.h;
+            velocity.v.y = -velocity.v.y;
+        }
+
+        //Update player rect based on the calculated position
         this->rect.x = static_cast<int>(this->position.v.x);
         this->rect.y = static_cast<int>(this->position.v.y);
     }
 
+
+    //Handling car collision with each other
+
+    bool checkCollision(const Car& other) const {
+        return SDL_HasIntersection(&this->rect, &other.rect);
+    }
+
+    void handleCollision(Car& other) {
+
+        vect_t temp = this->velocity;
+        this->velocity = other.velocity;
+        other.velocity = temp;
+
+        vect_t displacement = this->position - other.position;
+        double distance = std::sqrt(displacement.v.x * displacement.v.x + displacement.v.y * displacement.v.y);
+        double overlap = 0.5 * (distance - (this->rect.w + other.rect.w) / 2);
+
+        this->position.v.x -= overlap * (this->position.v.x - other.position.v.x) / distance;
+        this->position.v.y -= overlap * (this->position.v.y - other.position.v.y) / distance;
+
+        other.position.v.x += overlap * (this->position.v.x - other.position.v.x) / distance;
+        other.position.v.y += overlap * (this->position.v.y - other.position.v.y) / distance;
+    }
 };
 
 
@@ -117,16 +184,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    //Loading textures for cars and track
     std::vector<SDL_Texture*> textures;
-    SDL_Texture* trackTexture = loadTexture("track.bmp", renderer);
+    SDL_Texture* trackTexture = loadTexture("resources/track.bmp", renderer);
     if (!trackTexture) return 1;
     textures.push_back(trackTexture);
 
-    SDL_Texture* car1Texture = loadTexture("car1.bmp", renderer);
+    SDL_Texture* car1Texture = loadTexture("resources/car1.bmp", renderer);
     if (!car1Texture) return 1;
     textures.push_back(car1Texture);
 
-    SDL_Texture* car2Texture = loadTexture("car2.bmp", renderer);
+    SDL_Texture* car2Texture = loadTexture("resources/car2.bmp", renderer);
     if (!car2Texture) return 1;
     textures.push_back(car2Texture);
 
@@ -138,41 +206,42 @@ int main(int argc, char* argv[]) {
         Car(100, 100, car1Texture),
         Car(200, 100, car2Texture)
     };
+
+    // 60 fps animation
     double dt = 1./60.;
 
-    auto tp1 = std::chrono::system_clock::now();
-    auto tp2 = std::chrono::system_clock::now();
 
+    //Game loop
     while (!quit) {
-        tp2 = std::chrono::system_clock::now();
-        std::chrono::duration<float> elapsedTime = tp2 - tp1;
-        tp1 = tp2;
-        float fElapsedTime = elapsedTime.count();
+        //Even loop
         while (SDL_PollEvent(&event)) {
            switch(event.type) {
                case SDL_QUIT:
                 quit = true;
                break;
+               //Key press handle for car movement
                case SDL_KEYDOWN :
-                     if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].moveUp(-50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].moveDown(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].moveLeft(-50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].moveRight(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].moveUp(-50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].moveDown(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].moveLeft(-50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].moveRight(50);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(50.);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(50.);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(5);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(5);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(50.);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(50.);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(5);
+                     if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnRight(5);
                break;
                 case SDL_KEYUP :
-                    if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].moveUp(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].moveDown(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].moveLeft(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].moveRight(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].moveUp(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].moveDown(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].moveLeft(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].moveRight(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
+                    if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
                break;
+               default:
+                   break;
              }
         }
 
@@ -182,12 +251,24 @@ int main(int argc, char* argv[]) {
 
         // Draw track
         SDL_RenderCopy(renderer, trackTexture, nullptr, nullptr);
+
         // Draw cars
         for (auto& car : cars) {
             car.update(dt);
-            car.draw(renderer);
         }
 
+        //Collision checking for both cars
+        if (cars[0].checkCollision(cars[1])) {
+            cars[0].handleCollision(cars[1]);
+        }
+        if (cars[1].checkCollision(cars[0])) {
+            cars[1].handleCollision(cars[0]);
+        }
+
+        //Rendering cars
+        for (auto& car : cars) {
+            car.draw(renderer);
+        }
 
         // Update screen
         SDL_RenderPresent(renderer);
