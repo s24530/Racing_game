@@ -8,13 +8,15 @@
 constexpr int WINDOW_WIDTH = 800;
 constexpr int WINDOW_HEIGHT = 600;
 
+
+
 bool init(SDL_Window*& window, SDL_Renderer*& renderer) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
         return false;
     }
 
-    window = SDL_CreateWindow("Multiplayer Racing Game", 100, 100, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Racing Game", 100, 100, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
         return false;
@@ -83,20 +85,29 @@ vect_t operator-(const vect_t a, const vect_t b) {
 class Car {
 
 private:
-    SDL_Rect rect;
+    SDL_Rect carRect;
+    SDL_Rect finishLine = {470,100,10,50};
     vect_t position = { 0, 0 };
     vect_t velocity = { 0, 0 };
     vect_t acceleration = { 0, 0 };
-    double angle = 0.;
+    double angle = 90.;
     double accelerationValue = 0.0;
+    std::vector<SDL_Rect> trackBounds = {
+        {170, 160, 385, 5},
+        {170, 160, 5, 314},
+        {557, 160, 5, 314},
+        {355, 298, 5, 302}
+    };
+    int timesPassedFinishLine = 0;
 
     SDL_Texture* texture;
+
 public:
 
     Car(int x, int y, SDL_Texture* tex) : texture(tex) {
         position.v.x = x;
         position.v.y = y;
-        rect = { x, y, 25, 50 };
+        carRect = { x, y, 25, 50 };
     }
 
 
@@ -113,7 +124,7 @@ public:
     void turnRight(double value) { angle += value; }
 
     void draw(SDL_Renderer* renderer) const {
-        SDL_RenderCopyEx(renderer, texture, nullptr, &rect, angle, nullptr, SDL_FLIP_NONE);
+        SDL_RenderCopyEx(renderer, texture, nullptr, &carRect, angle, nullptr, SDL_FLIP_NONE);
     }
 
     void update(double dt) {
@@ -126,34 +137,64 @@ public:
         this->velocity = this->velocity + (this->acceleration * dt);
         this->velocity = this->velocity * 0.99;
 
-        //Collision with bound so player can't go out of bounds
+        //Collision with map trackBound so player can't go out of trackBounds
         if (position.v.x < 0) {
             position.v.x = 0;
             velocity.v.x = -velocity.v.x;
         }
-        if (position.v.x + rect.w > WINDOW_WIDTH) {
-            position.v.x = WINDOW_WIDTH - rect.w;
+        if (position.v.x + carRect.w > WINDOW_WIDTH) {
+            position.v.x = WINDOW_WIDTH - carRect.w;
             velocity.v.x = -velocity.v.x;
         }
         if (position.v.y < 0) {
             position.v.y = 0;
             velocity.v.y = -velocity.v.y;
         }
-        if (position.v.y + rect.h > WINDOW_HEIGHT) {
-            position.v.y = WINDOW_HEIGHT - rect.h;
+        if (position.v.y + carRect.h > WINDOW_HEIGHT) {
+            position.v.y = WINDOW_HEIGHT - carRect.h;
             velocity.v.y = -velocity.v.y;
         }
 
+
+        //Handle collision with track bounds
+        for (const auto& trackBound : trackBounds) {
+            if (SDL_HasIntersection(&carRect, &trackBound)) {
+                //Determine the side of the collision
+
+                //From the left
+                if (position.v.x + carRect.w > trackBound.x && position.v.x < trackBound.x) {
+                    position.v.x = trackBound.x - carRect.w;
+                    velocity.v.x = -velocity.v.x * 0.5; 
+                }
+
+                //From the right
+                if (position.v.x < trackBound.x + trackBound.w && position.v.x + carRect.w > trackBound.x + trackBound.w) {
+                    position.v.x = trackBound.x + trackBound.w;
+                    velocity.v.x = -velocity.v.x * 0.5; 
+                }
+
+                //From above
+                if (position.v.y + carRect.h > trackBound.y && position.v.y < trackBound.y) {
+                    position.v.y = trackBound.y - carRect.h;
+                    velocity.v.y = -velocity.v.y * 0.5; 
+                }
+                if (position.v.y < trackBound.y + trackBound.h && position.v.y + carRect.h > trackBound.y + trackBound.h) {
+                    //From below
+                    position.v.y = trackBound.y + trackBound.h;
+                    velocity.v.y = -velocity.v.y * 0.5; 
+                }
+            }
+        }
+
         //Update player rect based on the calculated position
-        this->rect.x = static_cast<int>(this->position.v.x);
-        this->rect.y = static_cast<int>(this->position.v.y);
+        this->carRect.x = static_cast<int>(this->position.v.x);
+        this->carRect.y = static_cast<int>(this->position.v.y);
     }
 
 
     //Handling car collision with each other
-
     bool checkCollision(const Car& other) const {
-        return SDL_HasIntersection(&this->rect, &other.rect);
+        return SDL_HasIntersection(&this->carRect, &other.carRect);
     }
 
     void handleCollision(Car& other) {
@@ -164,13 +205,33 @@ public:
 
         vect_t displacement = this->position - other.position;
         double distance = std::sqrt(displacement.v.x * displacement.v.x + displacement.v.y * displacement.v.y);
-        double overlap = 0.5 * (distance - (this->rect.w + other.rect.w) / 2);
+        double overlap = 0.5 * (distance - (this->carRect.w + other.carRect.w) / 2);
 
         this->position.v.x -= overlap * (this->position.v.x - other.position.v.x) / distance;
         this->position.v.y -= overlap * (this->position.v.y - other.position.v.y) / distance;
 
         other.position.v.x += overlap * (this->position.v.x - other.position.v.x) / distance;
         other.position.v.y += overlap * (this->position.v.y - other.position.v.y) / distance;
+    }
+
+
+    //Handling crossing the finsh line
+    bool checkFinishLine() const {
+        return SDL_HasIntersection(&this->carRect, &finishLine);
+    }
+
+    void passedFinishLine() {
+        timesPassedFinishLine += 1;
+    }
+
+    int getTimesPassed() const {
+        return timesPassedFinishLine;
+    }
+
+    //Used to stop cars after they cross the finish line
+    void stop() {
+        velocity = {0, 0};
+        acceleration = {0, 0};
     }
 };
 
@@ -199,12 +260,13 @@ int main(int argc, char* argv[]) {
     textures.push_back(car2Texture);
 
     bool quit = false;
+    bool raceFinished = false;
     SDL_Event event;
 
     // Create player cars
     std::vector<Car> cars = {
-        Car(100, 100, car1Texture),
-        Car(200, 100, car2Texture)
+        Car(370, 60, car1Texture),
+        Car(370, 110, car2Texture)
     };
 
     // 60 fps animation
@@ -215,34 +277,37 @@ int main(int argc, char* argv[]) {
     while (!quit) {
         //Even loop
         while (SDL_PollEvent(&event)) {
-           switch(event.type) {
-               case SDL_QUIT:
-                quit = true;
-               break;
-               //Key press handle for car movement
-               case SDL_KEYDOWN :
-                     if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(5);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(5);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(50.);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(5);
-                     if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnRight(5);
-               break;
-                case SDL_KEYUP :
-                    if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
-                    if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
-               break;
-               default:
-                   break;
-             }
+                switch(event.type) {
+                    case SDL_QUIT:
+                        quit = true;
+                    break;
+                    //Key press handle for car movement
+                    case SDL_KEYDOWN :
+                        if(!raceFinished) {
+                            if (event.key.keysym.scancode == SDL_SCANCODE_W ) cars[0].accelerate(50.);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(50.);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(10);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(10);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(50.);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(50.);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(10);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnRight(10);
+                        }
+                        break;
+                    case SDL_KEYUP :
+                        if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) quit = true;
+                        if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
+                        if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
+                        break;
+                    default:
+                        break;
+                }
         }
 
         // Clear screen
@@ -255,6 +320,24 @@ int main(int argc, char* argv[]) {
         // Draw cars
         for (auto& car : cars) {
             car.update(dt);
+        }
+
+        if (!raceFinished) {
+            if (cars[0].checkFinishLine()) {
+                if(cars[0].getTimesPassed() < 10) {
+                    cars[0].passedFinishLine();
+                }else{
+                    raceFinished = true;
+                    for (auto& car : cars) car.stop();
+                }
+            } else if (cars[1].checkFinishLine()) {
+                if(cars[1].getTimesPassed() < 40) {
+                    cars[1].passedFinishLine();
+                }else {
+                    raceFinished = true;
+                    for (auto& car : cars) car.stop();
+                }
+            }
         }
 
         //Collision checking for both cars
