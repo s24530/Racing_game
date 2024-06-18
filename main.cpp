@@ -107,7 +107,7 @@ public:
     Car(int x, int y, SDL_Texture* tex) : texture(tex) {
         position.v.x = x;
         position.v.y = y;
-        carRect = { x, y, 25, 50 };
+        carRect = { x, y, 20, 40 };
     }
 
 
@@ -178,8 +178,9 @@ public:
                     position.v.y = trackBound.y - carRect.h;
                     velocity.v.y = -velocity.v.y * 0.5; 
                 }
+
+                //From below
                 if (position.v.y < trackBound.y + trackBound.h && position.v.y + carRect.h > trackBound.y + trackBound.h) {
-                    //From below
                     position.v.y = trackBound.y + trackBound.h;
                     velocity.v.y = -velocity.v.y * 0.5; 
                 }
@@ -235,6 +236,12 @@ public:
     }
 };
 
+//Print winner message for players
+void printWinner(SDL_Renderer* renderer, SDL_Texture* winnerTexture) {
+    SDL_Rect dstRect = { 0 , 0, WINDOW_WIDTH, WINDOW_HEIGHT };
+    SDL_RenderCopy(renderer, winnerTexture, nullptr, &dstRect);
+}
+
 
 int main(int argc, char* argv[]) {
     SDL_Window* window = nullptr;
@@ -258,6 +265,10 @@ int main(int argc, char* argv[]) {
     SDL_Texture* car2Texture = loadTexture("resources/car2.bmp", renderer);
     if (!car2Texture) return 1;
     textures.push_back(car2Texture);
+
+    SDL_Texture* winnerTexture = loadTexture("resources/winner1.bmp", renderer);
+    if (!winnerTexture) return 1;
+    textures.push_back(winnerTexture);
 
     bool quit = false;
     bool raceFinished = false;
@@ -283,7 +294,11 @@ int main(int argc, char* argv[]) {
                     break;
                     //Key press handle for car movement
                     case SDL_KEYDOWN :
-                        if(!raceFinished) {
+                        if(raceFinished) {
+                            cars[0].stop();
+                            cars[1].stop();
+                        }
+                        if(!raceFinished){
                             if (event.key.keysym.scancode == SDL_SCANCODE_W ) cars[0].accelerate(50.);
                             if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(50.);
                             if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(10);
@@ -296,14 +311,14 @@ int main(int argc, char* argv[]) {
                         break;
                     case SDL_KEYUP :
                         if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) quit = true;
-                        if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
-                        if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
+                            if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
                         break;
                     default:
                         break;
@@ -317,24 +332,33 @@ int main(int argc, char* argv[]) {
         // Draw track
         SDL_RenderCopy(renderer, trackTexture, nullptr, nullptr);
 
-        // Draw cars
+        // Update cars
         for (auto& car : cars) {
             car.update(dt);
         }
 
+        //Checking if player passed the finish line 2 lines
+        //-> using bigger value due to the amount of collision between rects
         if (!raceFinished) {
             if (cars[0].checkFinishLine()) {
-                if(cars[0].getTimesPassed() < 10) {
+                if(cars[0].getTimesPassed() < 2) {
                     cars[0].passedFinishLine();
-                }else{
+                }else {
                     raceFinished = true;
+                    winnerTexture = loadTexture("resources/winner1.bmp", renderer);
+                    if (!winnerTexture) return 1;
+                    textures.push_back(winnerTexture);
                     for (auto& car : cars) car.stop();
                 }
-            } else if (cars[1].checkFinishLine()) {
+            }
+            if (cars[1].checkFinishLine()) {
                 if(cars[1].getTimesPassed() < 40) {
                     cars[1].passedFinishLine();
                 }else {
                     raceFinished = true;
+                    winnerTexture = loadTexture("resources/winner2.bmp", renderer);
+                    if (!winnerTexture) return 1;
+                    textures.push_back(winnerTexture);
                     for (auto& car : cars) car.stop();
                 }
             }
@@ -351,6 +375,11 @@ int main(int argc, char* argv[]) {
         //Rendering cars
         for (auto& car : cars) {
             car.draw(renderer);
+        }
+
+        //Print winner message
+        if (raceFinished) {
+            printWinner(renderer, winnerTexture);
         }
 
         // Update screen
