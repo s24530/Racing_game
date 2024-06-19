@@ -1,0 +1,12 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+C:/Users/s24530/Desktop/Racing_game/vendored/sdl/src/main/windows/version.rc
+winresrc.h
+C:/Users/s24530/Desktop/Racing_game/vendored/sdl/src/main/windows/winresrc.h
+

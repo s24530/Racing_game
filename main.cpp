@@ -233,6 +233,7 @@ public:
     void stop() {
         velocity = {0, 0};
         acceleration = {0, 0};
+        accelerationValue = 0.0;
     }
 };
 
@@ -244,8 +245,8 @@ void printWinner(SDL_Renderer* renderer, SDL_Texture* winnerTexture) {
 
 
 int main(int argc, char* argv[]) {
-    SDL_Window* window = nullptr;
-    SDL_Renderer* renderer = nullptr;
+    SDL_Window *window = nullptr;
+    SDL_Renderer *renderer = nullptr;
 
     if (!init(window, renderer)) {
         std::cerr << "Failed to initialize SDL." << std::endl;
@@ -253,77 +254,73 @@ int main(int argc, char* argv[]) {
     }
 
     //Loading textures for cars and track
-    std::vector<SDL_Texture*> textures;
-    SDL_Texture* trackTexture = loadTexture("resources/track.bmp", renderer);
+    std::vector<SDL_Texture *> textures;
+    SDL_Texture *trackTexture = loadTexture("resources/track.bmp", renderer);
     if (!trackTexture) return 1;
     textures.push_back(trackTexture);
 
-    SDL_Texture* car1Texture = loadTexture("resources/car1.bmp", renderer);
+    SDL_Texture *car1Texture = loadTexture("resources/car1.bmp", renderer);
     if (!car1Texture) return 1;
     textures.push_back(car1Texture);
 
-    SDL_Texture* car2Texture = loadTexture("resources/car2.bmp", renderer);
+    SDL_Texture *car2Texture = loadTexture("resources/car2.bmp", renderer);
     if (!car2Texture) return 1;
     textures.push_back(car2Texture);
 
-    SDL_Texture* winnerTexture = loadTexture("resources/winner1.bmp", renderer);
+    SDL_Texture *winnerTexture = loadTexture("resources/winner1.bmp", renderer);
     if (!winnerTexture) return 1;
     textures.push_back(winnerTexture);
 
     bool quit = false;
     bool raceFinished = false;
     SDL_Event event;
+    const Uint8 *keys = SDL_GetKeyboardState(NULL);;
 
     // Create player cars
     std::vector<Car> cars = {
-        Car(370, 60, car1Texture),
-        Car(370, 110, car2Texture)
+            Car(370, 60, car1Texture),
+            Car(370, 110, car2Texture)
     };
 
     // 60 fps animation
-    double dt = 1./60.;
+    double dt = 1. / 60.;
 
 
     //Game loop
     while (!quit) {
         //Even loop
         while (SDL_PollEvent(&event)) {
-                switch(event.type) {
-                    case SDL_QUIT:
-                        quit = true;
-                    break;
-                    //Key press handle for car movement
-                    case SDL_KEYDOWN :
-                        if(raceFinished) {
-                            cars[0].stop();
-                            cars[1].stop();
-                        }
-                        if(!raceFinished){
-                            if (event.key.keysym.scancode == SDL_SCANCODE_W ) cars[0].accelerate(50.);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(50.);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(10);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(10);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(50.);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(50.);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(10);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnRight(10);
-                        }
-                        break;
-                    case SDL_KEYUP :
-                        if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) quit = true;
-                            if (event.key.keysym.scancode == SDL_SCANCODE_W) cars[0].accelerate(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_S) cars[0].decelerate(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_A) cars[0].turnLeft(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_D) cars[0].turnRight(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_UP) cars[1].accelerate(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_DOWN) cars[1].decelerate(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_LEFT) cars[1].turnLeft(0);
-                            if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT) cars[1].turnLeft(0);
-                        break;
-                    default:
-                        break;
-                }
+
+            if (event.type == SDL_QUIT)
+                quit = true;
+
         }
+
+        cars[0].accelerate(0);
+        cars[0].decelerate(0);
+        cars[0].turnLeft(0);
+        cars[0].turnRight(0);
+        cars[1].accelerate(0);
+        cars[1].decelerate(0);
+        cars[1].turnLeft(0);
+        cars[1].turnLeft(0);
+        //Key press handle for car movement
+        if (!raceFinished) {
+            if (keys[SDL_SCANCODE_W]) cars[0].accelerate(50.);
+            if (keys[SDL_SCANCODE_S]) cars[0].decelerate(50.);
+            if (keys[SDL_SCANCODE_A]) cars[0].turnLeft(1);
+            if (keys[SDL_SCANCODE_D]) cars[0].turnRight(1);
+            if (keys[SDL_SCANCODE_UP]) cars[1].accelerate(50.);
+            if (keys[SDL_SCANCODE_DOWN]) cars[1].decelerate(50.);
+            if (keys[SDL_SCANCODE_LEFT]) cars[1].turnLeft(1);
+            if (keys[SDL_SCANCODE_RIGHT]) cars[1].turnRight(1);
+        }
+
+
+        if (keys[SDL_SCANCODE_ESCAPE]) quit = true;
+
+
+
 
         // Clear screen
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -333,7 +330,7 @@ int main(int argc, char* argv[]) {
         SDL_RenderCopy(renderer, trackTexture, nullptr, nullptr);
 
         // Update cars
-        for (auto& car : cars) {
+        for (auto &car: cars) {
             car.update(dt);
         }
 
@@ -341,25 +338,25 @@ int main(int argc, char* argv[]) {
         //-> using bigger value due to the amount of collision between rects
         if (!raceFinished) {
             if (cars[0].checkFinishLine()) {
-                if(cars[0].getTimesPassed() < 2) {
+                if (cars[0].getTimesPassed() < 2) {
                     cars[0].passedFinishLine();
-                }else {
+                } else {
                     raceFinished = true;
                     winnerTexture = loadTexture("resources/winner1.bmp", renderer);
                     if (!winnerTexture) return 1;
                     textures.push_back(winnerTexture);
-                    for (auto& car : cars) car.stop();
+                    for (auto &car: cars) car.stop();
                 }
             }
             if (cars[1].checkFinishLine()) {
-                if(cars[1].getTimesPassed() < 40) {
+                if (cars[1].getTimesPassed() < 40) {
                     cars[1].passedFinishLine();
-                }else {
+                } else {
                     raceFinished = true;
                     winnerTexture = loadTexture("resources/winner2.bmp", renderer);
                     if (!winnerTexture) return 1;
                     textures.push_back(winnerTexture);
-                    for (auto& car : cars) car.stop();
+                    for (auto &car: cars) car.stop();
                 }
             }
         }
@@ -373,7 +370,7 @@ int main(int argc, char* argv[]) {
         }
 
         //Rendering cars
-        for (auto& car : cars) {
+        for (auto &car: cars) {
             car.draw(renderer);
         }
 
@@ -384,7 +381,9 @@ int main(int argc, char* argv[]) {
 
         // Update screen
         SDL_RenderPresent(renderer);
+
     }
+
 
     cleanup(window, renderer, textures);
     return 0;
